@@ -1,0 +1,360 @@
+
+################## Statistics 740 Performance Assessment #############
+################## David O'Dell
+
+# install packages and load libraries
+
+install.packages(c("devtools", "stringr", "tidyverse"))
+install.packages(c("ggmap", "maps", "mapdata"))
+
+library(ggmap)
+library(maps)
+library(mapdata)
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+
+##################### EXPLORE DATA
+
+
+# import data
+
+Raw_Data <- read_excel("Downloads/WGU/Stats c740/Raw Data.xlsx")
+View(Raw_Data)
+
+df <- Raw_Data
+
+# check class to verify it is a data frame
+class(df)
+
+# view dimensions of data, rows x columns
+dim(df)
+
+# names of columns
+colnames(df)
+
+# structure of df
+str(df)
+
+# load dyplyr and use glimpse
+
+glimpse(df)
+
+# head
+head(df)
+summary(df)
+
+# Use the any() function to ask whether there are any NAs in the data
+is.na(df)
+any(is.na(df))
+
+
+######################### Graph A - Number of incidents by date #######################
+
+
+###################  TRANSORM AND EXTRACT DATA
+
+# if there's a date, inspect it to see if it is posix or just string
+
+class(df$`Event Clearance Date`)
+
+# [1] "2016-03-26 17:17:00 UTC" "2016-03-26 17:15:00 UTC" "2016-03-26 17:19:00 UTC"
+# [4] "2016-03-26 17:26:00 UTC" "2016-03-26 17:19:00 UTC" "2016-03-26 17:17:00 UTC"
+
+# format the date into a new variable with only the actual date, put the time into another  
+
+date <- format(df$`Event Clearance Date`, "%Y-%m-%d %a")
+time <- format(df$`Event Clearance Date`, "%H:%M")
+
+
+# check for duplicates, these are time based events so the likelihood of finding two events
+# at the same time isn't very high, so if we do find duplicates it could be due to system
+# or user error
+
+which(duplicated(df) | duplicated(df[nrow(df):1, ])[nrow(df):1])
+
+df[duplicated(df), ]
+# returns with 0 rows of duplicates and with an integer of 0
+# so we are confident there are no duplicate rows
+
+
+# get a count of occurences
+date_occur <- aggregate(date , by = list(date) , length)
+is.data.frame(date_occur)
+length(date_occur)
+
+#verify the number of rows in the df is the same as the rows of the aggregate values
+nrow(df)
+#[1] 1046
+
+sum(date_occur$x)
+#[1] 1046
+
+
+# plot bargraph of occurences vs. date
+barplot(date_occur$x)
+
+# make a vector for x-axis labels
+date_x_labels <- date_occur$Group.1
+date_x_labels
+
+# change date to character
+date_x <- as.character(date_x_labels)
+class(date_x)
+
+
+
+# make a vector of counts y axis
+count_y <- date_occur$x
+class(count_y)
+count_y
+
+# test a basic plot
+barplot(count_y, main = "Occurences by Date", 
+        xlab = "Dates", 
+        ylab = "Occurences", 
+        names.arg = c(date_x))
+
+
+# plot a more human readable bar graph of the 3 days of concern with total counts inside each bar
+
+
+
+p1 <- ggplot(data=date_occur, aes(x=date_x, y=count_y)) +
+       geom_bar(stat="identity", fill="steelblue")+
+       geom_text(aes(label=count_y), vjust=1.6, color="white", size=3.5)+
+       labs(title="Occurrences by Date", x = "Date", y = "Occurrences")+
+       theme_minimal()+
+       theme(plot.title = element_text(hjust = 0.5))
+p1
+
+
+
+
+######################### Graph B - Incidents by type #######################
+
+
+# data shows that there are two types of incident descriptions, an initial and a cleared
+# cleared incident appears to be the one that was the final accepted type
+# event clearance code is a categorical variable with codes mapped to descriptions
+# the data column event sub group seems to be the actual 'group' that is above the current
+# group, as if they were mismatched.  Clearly Theft is a parent of shoplifting and not 
+# the other way round, although there are some in subgroup that seem like parents and visa versa
+# in order to plot these, it might seem better to aggregate the category codes and map
+# them to the larger category group instead of the granular, more detailed category description
+
+# count the types of codes
+code_count <- aggregate(df$`Event Clearance Code` , by = data_frame(df$`Event Clearance Code`, df$`Event Clearance Description`) , length)
+code_count
+
+# sort code types by number of occurences
+code_count_sorted <- code_count[order(-code_count$x), ]
+code_count_sorted
+
+# how many different types of unique categories with data in them are we dealing with
+nrow(code_count_sorted)
+
+# 65 mapped categories with at least one occurrence
+# this is far too many to have on a bar graph, so we will perhaps display the top 10
+
+codes_top_ten <- code_count_sorted[1:10, ]
+codes_top_ten
+
+# we can also find out the bottom ten categories of incidents for that period
+
+codes_bottom_ten <- code_count_sorted[55:65, ]
+codes_bottom_ten
+
+
+
+#change column names to be more human readable
+
+colnames(codes_top_ten) <- c("code","description","x")
+is.data.frame(codes_top_ten)
+
+cat_code <- codes_top_ten$code
+cat_code
+
+# subset data to feed into the plot
+cat_desc <- codes_top_ten$description
+cat_desc
+
+cat_count <- codes_top_ten$x
+cat_count
+
+
+# plot data in bar graph with angled category headings and counts inside the bars
+
+p2 <- ggplot(data=codes_top_ten, aes(x=cat_desc, y=cat_count)) +
+  geom_bar(stat="identity", fill="steelblue")+
+  geom_text(aes(label=cat_count), vjust=1.6, color="white", size=3.5)+
+  labs(title="Top ten incident occurrences by event type", x = "Code", y = "Number")+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(axis.text.x=element_text(angle=45, hjust=1))
+
+p2
+
+# let's re-order the bars to make this more human readable
+
+p2b <- ggplot(data=codes_top_ten, aes(x = cat_desc, y = cat_count)) + 
+  scale_x_discrete(limits = cat_desc) +
+  geom_bar(stat="identity", fill="steelblue")+
+  geom_text(aes(label=cat_count), vjust=1.6, color="white", size=3.5)+
+  labs(title="Top ten incident occurrences by event type", x = "Code", y = "Number")+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(axis.text.x=element_text(angle=45, hjust=1))
+
+p2b
+
+
+
+
+
+######################### Graph C - Number of incidents by sector #######################
+
+# let's refresh ourselves with what the columns are actually called again
+
+# names of columns
+colnames(df)
+
+# we have not only sector / district data but also lat and long data so perhaps
+# we can supplement any line graphs with a map as well
+# let's grab all of it and work with it
+
+events_sector_raw <- df$`District/Sector`
+events_sector_agg <- aggregate(events_sector_raw, by = list(events_sector_raw) , length)
+
+# there are only 18 sectors that have data in them
+# let's sort this data and find out where all the bad boys are
+
+events_sector_sorted <- events_sector_agg[order(-events_sector_agg$x), ]
+events_sector_sorted
+
+
+# change some column names
+
+colnames(events_sector_sorted) <- c("sector","sector_count")
+events_sector_sorted
+
+# place the sector names and incident count into vectors for convenience later on
+
+sector_name <- events_sector_sorted$sector
+sector_value <- events_sector_sorted$sector_count
+
+
+# data show that sector H has the highest number of events with 125
+# let's plot this and see how things line up with a basic plot
+
+barplot(sector_value, main = "Occurences by Sector", 
+        xlab = "Sector", 
+        ylab = "Number", 
+        names.arg = c(sector_name))
+
+
+# plot a more human readable graph
+
+p3 <- ggplot(data=events_sector_sorted, aes(x = sector_name,
+                                            y = sector_value)) + 
+  scale_x_discrete(limits = sector_name) +
+  geom_bar(stat="identity", fill="steelblue")+
+  geom_text(aes(label=sector_value), vjust=1.6, color="white", size=3.5)+
+  labs(title="Incidents by Sector", x = "Sector", y = "Number")+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5))
+
+p3
+
+
+############################ MAP OF INCIDENTS ###########################
+
+# now that we have the graph, let's take a look and see if any of these sectors are 
+# near each other and see if there are any geographical relationships that produce
+# these types of incidents
+
+# let's look at our column names again
+
+colnames(df)
+
+# assign variables to columnar data
+lon <- df$Longitude
+lat <- df$Latitude
+
+
+# build a new dataframe with the minimum info required to map incidents
+map_df = df[ ,c(10,13,14)]
+
+
+# getting the map
+map <- get_map(location = c(lon = lon[1], lat = lat[1]), zoom = 11, 
+               maptype = "satellite", scale = "auto")
+
+# plotting the map with the lat long data from incidents in all sectors
+map_all <- ggmap(map) +
+  geom_point(data = map_df, 
+             aes(x = lon, y = lat, fill = "blue", alpha = 0.8), 
+             size = 2, shape = 21) +
+  guides(fill=FALSE, alpha=FALSE, size=FALSE)
+
+map_all
+
+# let's see if we can make some different colors in some hot sectors
+# first let's establish the top 3 hot sectors
+# we already found out the sorted list incidents and sectors
+# let's say red for H, orange for M and yellow for E
+
+map_H_red <- subset(map_df, map_df$`District/Sector` == "H", select = c(1:3))
+map_H_red
+lon_H <- map_H_red$Longitude
+lat_H <- map_H_red$Latitude
+
+
+map_M_red <- subset(map_df, map_df$`District/Sector` == "M", select = c(1:3))
+map_M_red
+lon_M <- map_M_red$Longitude
+lat_M <- map_M_red$Latitude
+
+
+
+map_E_red <- subset(map_df, map_df$`District/Sector` == "E", select = c(1:3))
+map_E_red
+lon_E <- map_E_red$Longitude
+lat_E <- map_E_red$Latitude
+
+
+# getting the map for H, colored RED
+
+
+
+# plotting the map with the lat long data from incidents in all sectors
+map_H <- ggmap(map) +
+  geom_point(data = map_H_red, 
+             aes(x = lon_H, y = lat_H, fill = "red", alpha = 0.8), 
+             size = 2, shape = 21) +
+  guides(fill=FALSE, alpha=FALSE, size=FALSE)
+
+map_H
+
+
+
+# plotting the map with the lat long data from incidents in all sectors
+map_M <- ggmap(map) +
+  geom_point(data = map_M_red, 
+             aes(x = lon_M, y = lat_M, fill = "orange", alpha = 0.8), 
+             size = 2, shape = 21) +
+  guides(fill=FALSE, alpha=FALSE, size=FALSE)
+
+map_M
+
+
+# plotting the map with the lat long data from incidents in all sectors
+map_E <- ggmap(map) +
+  geom_point(data = map_E_red, 
+             aes(x = lon_E, y = lat_E, fill = "yellow", alpha = 0.8), 
+             size = 2, shape = 22) +
+  guides(fill=FALSE, alpha=FALSE, size=FALSE)
+
+map_E
+
